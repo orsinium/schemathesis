@@ -385,3 +385,29 @@ def test_(request, case):
     # Then the base path is "/"
     result.assert_outcomes(passed=1)
     result.stdout.re_match_lines([r".*\[GET:/users\]"])
+
+
+def test_no_duplicates(testdir):
+    # Any given schema should produce unique test cases
+    testdir.make_test(
+        """
+@schema.parametrize()
+def test_(request, case):
+    request.config.HYPOTHESIS_CASES += 1
+""",
+        paths={
+            "/users": {
+                "get": {
+                    "parameters": [
+                        string(name="key", enum=["a"], required=True),
+                        {"type": "boolean", "in": "query", "name": "b"},
+                    ]
+                }
+            }
+        },
+    )
+
+    result = testdir.runpytest("-v", "-s")
+    result.assert_outcomes(passed=1)
+    result.stdout.re_match_lines([r".*\[GET:/v1/users\]"])
+    result.stdout.re_match_lines([r"Hypothesis calls: 3"])

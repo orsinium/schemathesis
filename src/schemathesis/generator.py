@@ -1,7 +1,10 @@
 """Provide strategies for given endpoint(s) definition."""
+import json
+from functools import partial
 from typing import Callable
 
 import attr
+import hypothesis.internal.conjecture.utils as cu
 import hypothesis.strategies as st
 from hypothesis import given
 from hypothesis_jsonschema import from_schema
@@ -12,7 +15,7 @@ from .types import Body, Headers, PathParameters, Query
 # TODO. Better naming
 
 
-@attr.s(slots=True)
+@attr.s(slots=True, hash=False)
 class Case:
     """A single test case parameters."""
 
@@ -22,6 +25,19 @@ class Case:
     headers: Headers = attr.ib()
     query: Query = attr.ib()
     body: Body = attr.ib()
+
+    def __hash__(self):
+        serialize = partial(json.dumps, sort_keys=True)
+        return hash(
+            (
+                self.path,
+                self.method,
+                serialize(self.path_parameters),
+                serialize(self.headers),
+                serialize(self.query),
+                serialize(self.body),
+            )
+        )
 
     @property
     def formatted_path(self) -> str:
@@ -36,7 +52,7 @@ def create_hypothesis_test(endpoint: Endpoint, test: Callable) -> Callable:
 
 
 def get_case_strategy(endpoint: Endpoint) -> st.SearchStrategy:
-    return st.builds(
+    case_strategy = st.builds(
         Case,
         path=st.just(endpoint.path),
         method=st.just(endpoint.method),
@@ -45,3 +61,19 @@ def get_case_strategy(endpoint: Endpoint) -> st.SearchStrategy:
         query=from_schema(endpoint.query),
         body=from_schema(endpoint.body),
     )
+
+    produced = set()
+
+    @st.composite
+    def unique_case(draw):
+        elements = cu.many(draw(st.data()).conjecture_data, min_size=1, max_size=100, average_size=50)  # type: ignore
+        while elements.more():
+            case = draw(case_strategy)
+            if case not in produced:
+                produced.add(case)
+                return case
+            break
+
+        elements.reject()
+
+    return unique_case()

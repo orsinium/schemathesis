@@ -6,6 +6,11 @@ Changelog
 `Unreleased`_
 -------------
 
+Changed
+~~~~~~~
+
+- Test generator produce unique results
+
 `0.3.0`_ - 2019-09-06
 ---------------------
 
